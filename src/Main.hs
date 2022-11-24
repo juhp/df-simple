@@ -4,7 +4,8 @@
 
 module Main (main) where
 
-import Data.List.Extra (intercalate, groupOn, groupSortOn, dropWhileEnd)
+import Data.List.Extra (dropWhileEnd, groupOn, groupSortOn,
+                        intercalate, isSuffixOf)
 import SimpleCmd
 
 main :: IO ()
@@ -15,9 +16,8 @@ main = do
     (h:ls) -> do
       putStrLn h
       putStrLn $
-        intercalate "\n" $
-        map (intercalate "\n") $
-        groupFS ls
+        intercalate "\n" . map (intercalate "\n") . groupFS $
+        filter (not . ("tmpfs" `isSuffixOf`) . column 0 ) ls
 
 groupFS :: [String] -> [[String]]
 groupFS ls =
