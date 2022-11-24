@@ -23,12 +23,15 @@ groupFS :: [String] -> [[String]]
 groupFS ls =
   let
     -- group by Used
-    used = groupSortOn (read @Int . (!! 2) . words) ls :: [[String]]
+    used = groupSortOn (read @Int . column 2) ls :: [[String]]
     -- subgroup by Filesystem
-    subgroups = map (groupOn ((!! 0) . words)) used :: [[[String]]]
+    subgroups = map (groupOn (column 0)) used :: [[[String]]]
   in map combineMounts <$> subgroups
 
 combineMounts :: [String] -> String
 combineMounts ms =
-  let mounts = map ((!! 5) . words) ms
+  let mounts = map (column 5) ms
   in dropWhileEnd (/= ' ') (head ms) ++ intercalate ", " mounts
+
+column :: Int -> String -> String
+column n = (!! n) . words
