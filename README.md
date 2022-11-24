@@ -1,4 +1,4 @@
-# df-combine
+# df-simple
 
 Simplifies:
 
@@ -24,7 +24,7 @@ tmpfs            3256652      3444   3253208   1% /run/user/1000
 to:
 
 ```shellsession
-$ df-combine
+$ df-simple
 Filesystem     1K-blocks      Used Available Use% Mounted on
 /dev/nvme0n1p1    613184     39956    573228   7% /run/host/boot/efi
 /dev/nvme0n1p2    996780    174444    753524  19% /run/host/boot

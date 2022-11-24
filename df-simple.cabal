@@ -1,4 +1,4 @@
-name:                df-combine
+name:                df-simple
 version:             0.1.0
 synopsis:            One line summary
 description:
@@ -9,8 +9,8 @@ author:              Jens Petersen <juhpetersen@gmail.com>
 maintainer:          Jens Petersen <juhpetersen@gmail.com>
 copyright:           2022  Jens Petersen <juhpetersen@gmail.com>
 category:            Unclassified
-homepage:            https://github.com/juhp/df-combine
-bug-reports:         https://github.com/juhp/df-combine/issues
+homepage:            https://github.com/juhp/df-simple
+bug-reports:         https://github.com/juhp/df-simple/issues
 build-type:          Simple
 --  extra-doc-files:     README.md
 --                       ChangeLog.md
@@ -22,11 +22,11 @@ cabal-version:       2.0
 
 source-repository head
   type:                git
-  location:            https://github.com/juhp/df-combine.git
+  location:            https://github.com/juhp/df-simple.git
 
-executable df-combine
+executable df-simple
   main-is:             Main.hs
---  other-modules:       Paths_df_combine
+--  other-modules:       Paths_df_simple
   hs-source-dirs:      src
   build-depends:       base < 5,
                        extra,
