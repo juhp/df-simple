@@ -26,11 +26,11 @@ to:
 
 ```shellsession
 $ df-simple
-Filesystem         Size     Used     Free  Use Mount
-/dev/nvme0n1p1     613M      40M     573M   7% /run/host/boot/efi
-/dev/nvme0n1p2     997M     260M     668M  29% /run/host/boot
-/dev/dm-0      498,427M 215,688M 281,290M  44% overlay /; /run/host{,/var{,/home}}
-/dev/sda1      479,547M 427,327M  27,786M  94% /var/mnt/extreme
+Filesystem     Size Used Free  Use Mount
+/dev/nvme0n1p1 613M  40M 573M   7% /run/host/boot/efi
+/dev/nvme0n1p2 997M 260M 668M  29% /run/host/boot
+/dev/dm-0      498G 216G 281G  44% overlay /; /run/host{,/var{,/home}}
+/dev/sda1      480G 427G  28G  94% /var/mnt/extreme
 ```
 
 ie sorts by Used, subgrouping filesystems combining mountpoints,

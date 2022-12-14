@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, RecordWildCards #-}
+{-# LANGUAGE NumericUnderscores, OverloadedStrings, RecordWildCards #-}
 
 -- SPDX-License-Identifier: BSD-3-Clause
 
@@ -25,20 +25,29 @@ data DfFileSystem a = FS {
 class DfData a where
   readPercent :: String -> a
   showPercent :: a -> String
-  readMega :: String -> a
-  showMega :: a -> String
+  readBlocks :: String -> a
+  showHuman :: a -> String
 
 instance DfData Text where
   readPercent = T.pack . init
   showPercent = T.unpack
-  readMega = T.pack
-  showMega = T.unpack
+  readBlocks = T.pack
+  showHuman = T.unpack
 
 instance DfData Natural where
   readPercent = read . init
   showPercent p = show p ++ "%"
-  readMega s = round $ (read s :: Double) / 1000
-  showMega n = "" +| commaizeF (toInteger n) |+ "M"
+  readBlocks = read
+  showHuman n =
+    let (s,u) = humanized (fromIntegral n :: Double)
+    in fmt (commaizeF (toInteger s)) ++ [u]
+    where
+      humanized :: Double -> (Int,Char)
+      humanized size
+        | size > 1000_000_000 = (round (size / 1000_000_000), 'T')
+        | size > 1000_000 = (round (size / 1000_000), 'G')
+        | size > 1_000 = (round (size / 1_000), 'M')
+        | otherwise = (round size, 'k')
 
 readFS :: DfData a => Bool -> String -> DfFileSystem a
 readFS nonheader l =
@@ -46,7 +55,7 @@ readFS nonheader l =
     name : blocks : used : available : percent : mount : rest ->
       if nonheader && not (null rest)
       then error' $ "df output with more than 6 columns:" +-+ show l
-      else FS name (readMega blocks) (readMega used) (readMega available) (readPercent percent) (unwords (mount : rest))
+      else FS name (readBlocks blocks) (readBlocks used) (readBlocks available) (readPercent percent) (unwords (mount : rest))
     _ -> error' $ "unexpected df header columns: " ++ show l
 
 -- 500GB:
@@ -81,16 +90,16 @@ renderOutput header fss =
       maximum $ map length $ hfield header : map field fss
 
     maxDataField hfield field =
-      maximum $ map length $ showMega (hfield header) : map (showMega . field) fss
+      maximum $ map length $ showHuman (hfield header) : map (showHuman . field) fss
 
     renderFS :: DfData a => Int -> Int -> Int -> Int -> Int -> DfFileSystem a
              -> IO ()
     renderFS nameMax blocksMax usedMax availMax percentMax (FS {..}) =
       fmtLn $
       "" +| padRightF nameMax ' ' fsName |+
-      "" +| padLeftF blocksMax ' ' (showMega fsBlocks) |+
-      "" +| padLeftF usedMax ' ' (showMega fsUsed) |+
-      "" +| padLeftF availMax ' ' (showMega fsAvailable) |+
+      "" +| padLeftF blocksMax ' ' (showHuman fsBlocks) |+
+      "" +| padLeftF usedMax ' ' (showHuman fsUsed) |+
+      "" +| padLeftF availMax ' ' (showHuman fsAvailable) |+
       "" +| padLeftF percentMax ' ' (showPercent fsPercent) |+
       "" +| replicate columnSpacing ' ' ++ fsMount |+ ""
 
@@ -149,7 +158,7 @@ combineMounts ms =
 
 -- https://stackoverflow.com/questions/21717646/longest-common-prefix-in-haskell
 
-commonPrefix :: Eq e => [e] -> [e] -> [e]
+commonPrefix :: Eq a => [a] -> [a] -> [a]
 commonPrefix _ [] = []
 commonPrefix [] _ = []
 commonPrefix (x:xs) (y:ys)
