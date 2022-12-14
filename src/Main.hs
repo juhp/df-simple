@@ -22,16 +22,22 @@ data DfFileSystem a = FS {
   }
 
 class DfData a where
-  readData :: String -> a
-  showData :: a -> String
+  readPercent :: String -> a
+  showPercent :: a -> String
+  readMega :: String -> a
+  showMega :: a -> String
 
 instance DfData Text where
-  readData = T.pack
-  showData = T.unpack
+  readPercent = T.pack . init
+  showPercent = T.unpack
+  readMega = T.pack
+  showMega = T.unpack
 
 instance DfData Natural where
-  readData = read
-  showData n = "" +| commaizeF (toInteger n) |+ ""
+  readPercent = read . init
+  showPercent p = show p ++ "%"
+  readMega s = round $ (read s :: Double) / 1000
+  showMega n = "" +| commaizeF (toInteger n) |+ "M"
 
 readFS :: DfData a => Bool -> String -> DfFileSystem a
 readFS nonheader l =
@@ -39,7 +45,7 @@ readFS nonheader l =
     name : blocks : used : available : percent : mount : rest ->
       if nonheader && not (null rest)
       then error' $ "df output with more than 6 columns:" +-+ show l
-      else FS name (readData blocks) (readData used) (readData available) (readData (init percent)) (unwords (mount : rest))
+      else FS name (readMega blocks) (readMega used) (readMega available) (readPercent percent) (unwords (mount : rest))
     _ -> error' $ "unexpected df header columns: " ++ show l
 
 -- 500GB:
@@ -74,19 +80,18 @@ renderOutput header fss =
       maximum $ map length $ hfield header : map field fss
 
     maxDataField hfield field =
-      maximum $ map length $ showData (hfield header) : map (showData . field) fss
+      maximum $ map length $ showMega (hfield header) : map (showMega . field) fss
 
     renderFS :: DfData a => Int -> Int -> Int -> Int -> Int -> DfFileSystem a
              -> IO ()
     renderFS nameMax blocksMax usedMax availMax percentMax (FS {..}) =
       fmtLn $
       "" +| padRightF nameMax ' ' fsName |+
-      "" +| padLeftF blocksMax ' ' (showData fsBlocks) |+
-      "" +| padLeftF usedMax ' ' (showData fsUsed) |+
-      "" +| padLeftF availMax ' ' (showData fsAvailable) |+
-      "" +| padLeftF percentMax ' ' (showData fsPercent ++ "%") |+
-      "" +| padLeftF columnSpacing ' ' fsMount |+
-      ""
+      "" +| padLeftF blocksMax ' ' (showMega fsBlocks) |+
+      "" +| padLeftF usedMax ' ' (showMega fsUsed) |+
+      "" +| padLeftF availMax ' ' (showMega fsAvailable) |+
+      "" +| padLeftF percentMax ' ' (showPercent fsPercent) |+
+      "" +| replicate columnSpacing ' ' ++ fsMount |+ ""
 
 -- FIXME --tmpfs or --all
 -- FIXME -h
@@ -95,8 +100,8 @@ main = do
   out <- cmdLines "df" []
   case out of
     [] -> error' "no output from df!"
-    (h:ls) -> do
-      let header = readFS False h
+    (_h:ls) -> do
+      let header = FS "Filesystem" "Size" "Used" "Free" "Use" "Mount"
           fs = map (readFS True) ls
       renderOutput header $
         groupFS $
