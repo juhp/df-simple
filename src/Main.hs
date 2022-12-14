@@ -1,37 +1,87 @@
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE OverloadedStrings, RecordWildCards #-}
 
 -- SPDX-License-Identifier: BSD-3-Clause
 
 module Main (main) where
 
-import Data.List.Extra (dropWhileEnd, groupOn, groupSortOn,
-                        intercalate, isSuffixOf)
+import Data.Tuple.Extra ((&&&))
+import Data.List.Extra (groupSortOn, intercalate, isSuffixOf, sortOn)
+import Fmt
+import Numeric.Natural
 import SimpleCmd
 
+data DfFileSystem = FS {
+  fsName :: String,
+  fsBlocks :: Natural,
+  fsUsed :: Natural,
+  fsAvailable :: Natural,
+  fsUsePercent :: Natural,
+  fsMount :: String
+  }
+  deriving Show
+
+readFSLine :: String -> (String, String, String, String, String, String)
+readFSLine l =
+  case words l of
+    [name, blocks, used, available, percent, mount] ->
+      (name, blocks, used, available, percent, mount)
+    _ -> error' "df output with more than 6 columns"
+
+readFS :: String -> DfFileSystem
+readFS cs =
+  case readFSLine cs of
+    (fsName, blocks, used, available, percent, fsMount) ->
+      let fsBlocks = read blocks
+          fsUsed = read used
+          fsAvailable = read available
+          fsUsePercent = read $ init percent
+      in FS {..}
+
+-- 500GB:
+-- Filesystem     1K-blocks      Used Available Use% Mounted on
+-- /dev/dm-0      498426880 215097136 281873616  44% /sysroot
+
+-- 12GB VM:
+-- Filesystem     1K-blocks    Used Available Use% Mounted on
+-- /dev/vda3       12579840 9469076   2759116  78% /
+
+renderFS :: DfFileSystem -> IO ()
+renderFS FS {..} =
+  fmtLn $
+  "" +| padRightF 14 ' ' fsName |+
+  "" +| padLeftF 10 ' ' (show fsBlocks) |+
+  "" +| padLeftF 10 ' ' (show fsUsed) |+
+  "" +| padLeftF 10 ' ' (show fsAvailable) |+
+  "" +| padLeftF 5 ' ' (show fsUsePercent ++ "%") |+
+  "" +| ' ' : fsMount |+
+  ""
+
+-- FIXME --tmpfs or --all
+-- FIXME -h
 main :: IO ()
 main = do
   out <- cmdLines "df" []
   case out of
     [] -> error' "no output from df!"
     (h:ls) -> do
+      let --header = readFSLine h
+          fs = map readFS ls
       putStrLn h
-      putStrLn $
-        intercalate "\n" . map (intercalate "\n") . groupFS $
-        filter (not . ("tmpfs" `isSuffixOf`) . column 0 ) ls
+      mapM_ renderFS $
+        groupFS $
+        filter (not . ("tmpfs" `isSuffixOf`) . fsName) fs
 
-groupFS :: [String] -> [[String]]
+groupFS :: [DfFileSystem] -> [DfFileSystem]
 groupFS ls =
-  let
-    -- group by Used
-    used = groupSortOn (read @Int . column 2) ls :: [[String]]
-    -- subgroup by Filesystem
-    subgroups = map (groupOn (column 0)) used :: [[[String]]]
-  in map combineMounts <$> subgroups
+  map combineMounts $ groupSortOn fsUsed ls
 
-combineMounts :: [String] -> String
+combineMounts :: [DfFileSystem] -> DfFileSystem
 combineMounts ms =
-  let mounts = map (column 5) ms
-  in dropWhileEnd (/= ' ') (head ms) ++ intercalate ", " mounts
+  let fsmounts = map (fsName &&& fsMount) ms
+  in chosen {fsMount = intercalate ", " $ map renderMount fsmounts}
+  where
+    chosen = head $ last $ sortOn length $ groupSortOn fsName ms
 
-column :: Int -> String -> String
-column n = (!! n) . words
+    -- FIXME group filenames: /run/host{,/var{,/home}}
+    renderMount (name,mount) =
+      if name == fsName chosen then mount else mount ++ "(" ++ name ++ ")"
