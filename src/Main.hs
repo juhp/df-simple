@@ -50,18 +50,6 @@ readFS nonheader l =
 -- Filesystem     1K-blocks    Used Available Use% Mounted on
 -- /dev/vda3       12579840 9469076   2759116  78% /
 
-renderFS :: DfData a => Int -> Int -> Int -> Int -> Int -> DfFileSystem a
-         -> IO ()
-renderFS nameMax blocksMax usedMax availMax percentMax (FS {..}) =
-  fmtLn $
-  "" +| padRightF nameMax ' ' fsName |+
-  "" +| padLeftF blocksMax ' ' (showData fsBlocks) |+
-  "" +| padLeftF usedMax ' ' (showData fsUsed) |+
-  "" +| padLeftF availMax ' ' (showData fsAvailable) |+
-  "" +| padLeftF percentMax ' ' (showData fsPercent ++ "%") |+
-  "" +| padLeftF columnSpacing ' ' fsMount |+
-  ""
-
 columnSpacing :: Int
 columnSpacing = 1
 
@@ -69,22 +57,36 @@ renderOutput :: DfFileSystem Text -> [DfFileSystem Natural] -> IO ()
 renderOutput header fss =
   if null fss
   then error' "no fs output!"
-  else do
-    let nameMax = maxStringField fsName fsName
-        blocksMax = maxDataField fsBlocks fsBlocks + columnSpacing
-        usedMax = maxDataField fsUsed fsUsed + columnSpacing
-        availMax = maxDataField fsAvailable fsAvailable + columnSpacing
-        percentMax = 5
-        render fs = renderFS nameMax blocksMax usedMax availMax percentMax fs
-                    :: IO ()
-    render header
-    mapM_ render fss
+  else
+    let render fs =
+          let
+            nameMax = maxStringField fsName fsName
+            blocksMax = maxDataField fsBlocks fsBlocks + columnSpacing
+            usedMax = maxDataField fsUsed fsUsed + columnSpacing
+            availMax = maxDataField fsAvailable fsAvailable + columnSpacing
+            percentMax = 5
+          in renderFS nameMax blocksMax usedMax availMax percentMax fs :: IO ()
+    in do
+      render header
+      mapM_ render fss
   where
     maxStringField hfield field =
       maximum $ map length $ hfield header : map field fss
 
     maxDataField hfield field =
       maximum $ map length $ showData (hfield header) : map (showData . field) fss
+
+    renderFS :: DfData a => Int -> Int -> Int -> Int -> Int -> DfFileSystem a
+             -> IO ()
+    renderFS nameMax blocksMax usedMax availMax percentMax (FS {..}) =
+      fmtLn $
+      "" +| padRightF nameMax ' ' fsName |+
+      "" +| padLeftF blocksMax ' ' (showData fsBlocks) |+
+      "" +| padLeftF usedMax ' ' (showData fsUsed) |+
+      "" +| padLeftF availMax ' ' (showData fsAvailable) |+
+      "" +| padLeftF percentMax ' ' (showData fsPercent ++ "%") |+
+      "" +| padLeftF columnSpacing ' ' fsMount |+
+      ""
 
 -- FIXME --tmpfs or --all
 -- FIXME -h
