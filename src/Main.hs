@@ -7,7 +7,8 @@ module Main (main) where
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Tuple.Extra ((&&&))
-import Data.List.Extra (groupSortOn, intercalate, isSuffixOf, sortOn)
+import Data.List.Extra (dropPrefix, groupSortOn, intercalate, isSuffixOf,
+                        sortOn)
 import Fmt
 import Numeric.Natural
 import SimpleCmd
@@ -113,11 +114,47 @@ groupFS ls =
 
 combineMounts :: [DfFileSystem a] -> DfFileSystem a
 combineMounts ms =
-  let fsmounts = map (fsName &&& fsMount) ms
-  in chosen {fsMount = intercalate ", " $ map renderMount fsmounts}
+  chosen {fsMount = renderMounts}
   where
-    chosen = head $ last $ sortOn length $ groupSortOn fsName ms
+    fsmount = fsName &&& fsMount
 
-    -- FIXME group filenames: /run/host{,/var{,/home}}
+    commonfss = sortOn length $ groupSortOn fsName ms
+
+    others = init commonfss
+    large = last commonfss
+    chosen = head large
+    mounts = map fsMount large
+
+    renderMounts =
+      concatMap ((++ "; ") . intercalate ", " . map (renderMount . fsmount)) others ++ renderCommonPaths mounts
+
     renderMount (name,mount) =
-      if name == fsName chosen then mount else mount ++ "(" ++ name ++ ")"
+      if name == fsName chosen then mount else name +-+ mount
+
+    renderCommonPaths [] = ""
+    renderCommonPaths [p] = p
+    renderCommonPaths paths =
+      let
+        -- FIXME should be dir
+        prefix = commonPrefixAll paths
+        subpaths = map (dropPrefix prefix) paths
+      in
+        if length prefix < 2
+        then head paths ++ ", " ++ renderCommonPaths (tail paths)
+        else prefix ++ "{" ++
+             (if null (head subpaths)
+              then "," ++ renderCommonPaths (tail subpaths)
+              else intercalate "," subpaths)
+             ++ "}"
+
+-- https://stackoverflow.com/questions/21717646/longest-common-prefix-in-haskell
+
+commonPrefix :: Eq e => [e] -> [e] -> [e]
+commonPrefix _ [] = []
+commonPrefix [] _ = []
+commonPrefix (x:xs) (y:ys)
+  | x == y    = x : commonPrefix xs ys
+  | otherwise = []
+
+commonPrefixAll :: Eq a => [[a]] -> [a]
+commonPrefixAll = foldl1 commonPrefix
