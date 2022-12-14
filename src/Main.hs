@@ -4,38 +4,43 @@
 
 module Main (main) where
 
+import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Tuple.Extra ((&&&))
 import Data.List.Extra (groupSortOn, intercalate, isSuffixOf, sortOn)
 import Fmt
 import Numeric.Natural
 import SimpleCmd
 
-data DfFileSystem = FS {
+data DfFileSystem a = FS {
   fsName :: String,
-  fsBlocks :: Natural,
-  fsUsed :: Natural,
-  fsAvailable :: Natural,
-  fsUsePercent :: Natural,
+  fsBlocks :: a,
+  fsUsed :: a,
+  fsAvailable :: a,
+  fsPercent :: a,
   fsMount :: String
   }
-  deriving Show
 
-readFSLine :: String -> (String, String, String, String, String, String)
-readFSLine l =
+class DfData a where
+  readData :: String -> a
+  showData :: a -> String
+
+instance DfData Text where
+  readData = T.pack
+  showData = T.unpack
+
+instance DfData Natural where
+  readData = read
+  showData n = "" +| commaizeF (toInteger n) |+ ""
+
+readFS :: DfData a => Bool -> String -> DfFileSystem a
+readFS nonheader l =
   case words l of
-    [name, blocks, used, available, percent, mount] ->
-      (name, blocks, used, available, percent, mount)
-    _ -> error' "df output with more than 6 columns"
-
-readFS :: String -> DfFileSystem
-readFS cs =
-  case readFSLine cs of
-    (fsName, blocks, used, available, percent, fsMount) ->
-      let fsBlocks = read blocks
-          fsUsed = read used
-          fsAvailable = read available
-          fsUsePercent = read $ init percent
-      in FS {..}
+    name : blocks : used : available : percent : mount : rest ->
+      if nonheader && not (null rest)
+      then error' $ "df output with more than 6 columns:" +-+ show l
+      else FS name (readData blocks) (readData used) (readData available) (readData (init percent)) (unwords (mount : rest))
+    _ -> error' $ "unexpected df header columns: " ++ show l
 
 -- 500GB:
 -- Filesystem     1K-blocks      Used Available Use% Mounted on
@@ -45,16 +50,41 @@ readFS cs =
 -- Filesystem     1K-blocks    Used Available Use% Mounted on
 -- /dev/vda3       12579840 9469076   2759116  78% /
 
-renderFS :: DfFileSystem -> IO ()
-renderFS FS {..} =
+renderFS :: DfData a => Int -> Int -> Int -> Int -> Int -> DfFileSystem a
+         -> IO ()
+renderFS nameMax blocksMax usedMax availMax percentMax (FS {..}) =
   fmtLn $
-  "" +| padRightF 14 ' ' fsName |+
-  "" +| padLeftF 10 ' ' (show fsBlocks) |+
-  "" +| padLeftF 10 ' ' (show fsUsed) |+
-  "" +| padLeftF 10 ' ' (show fsAvailable) |+
-  "" +| padLeftF 5 ' ' (show fsUsePercent ++ "%") |+
-  "" +| ' ' : fsMount |+
+  "" +| padRightF nameMax ' ' fsName |+
+  "" +| padLeftF blocksMax ' ' (showData fsBlocks) |+
+  "" +| padLeftF usedMax ' ' (showData fsUsed) |+
+  "" +| padLeftF availMax ' ' (showData fsAvailable) |+
+  "" +| padLeftF percentMax ' ' (showData fsPercent ++ "%") |+
+  "" +| padLeftF columnSpacing ' ' fsMount |+
   ""
+
+columnSpacing :: Int
+columnSpacing = 1
+
+renderOutput :: DfFileSystem Text -> [DfFileSystem Natural] -> IO ()
+renderOutput header fss =
+  if null fss
+  then error' "no fs output!"
+  else do
+    let nameMax = maxStringField fsName fsName
+        blocksMax = maxDataField fsBlocks fsBlocks + columnSpacing
+        usedMax = maxDataField fsUsed fsUsed + columnSpacing
+        availMax = maxDataField fsAvailable fsAvailable + columnSpacing
+        percentMax = 5
+        render fs = renderFS nameMax blocksMax usedMax availMax percentMax fs
+                    :: IO ()
+    render header
+    mapM_ render fss
+  where
+    maxStringField hfield field =
+      maximum $ map length $ hfield header : map field fss
+
+    maxDataField hfield field =
+      maximum $ map length $ showData (hfield header) : map (showData . field) fss
 
 -- FIXME --tmpfs or --all
 -- FIXME -h
@@ -64,18 +94,17 @@ main = do
   case out of
     [] -> error' "no output from df!"
     (h:ls) -> do
-      let --header = readFSLine h
-          fs = map readFS ls
-      putStrLn h
-      mapM_ renderFS $
+      let header = readFS False h
+          fs = map (readFS True) ls
+      renderOutput header $
         groupFS $
         filter (not . ("tmpfs" `isSuffixOf`) . fsName) fs
 
-groupFS :: [DfFileSystem] -> [DfFileSystem]
+groupFS :: Ord a => [DfFileSystem a] -> [DfFileSystem a]
 groupFS ls =
   map combineMounts $ groupSortOn fsUsed ls
 
-combineMounts :: [DfFileSystem] -> DfFileSystem
+combineMounts :: [DfFileSystem a] -> DfFileSystem a
 combineMounts ms =
   let fsmounts = map (fsName &&& fsMount) ms
   in chosen {fsMount = intercalate ", " $ map renderMount fsmounts}
