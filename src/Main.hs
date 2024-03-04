@@ -53,9 +53,7 @@ readFS :: DfData a => Bool -> String -> DfFileSystem a
 readFS nonheader l =
   case words l of
     name : blocks : used : available : percent : mount : rest ->
-      if nonheader && not (null rest)
-      then error' $ "df output with more than 6 columns:" +-+ show l
-      else FS name (readBlocks blocks) (readBlocks used) (readBlocks available) (readPercent percent) (unwords (mount : rest))
+      FS name (readBlocks blocks) (readBlocks used) (readBlocks available) (readPercent percent) (unwords (mount : rest))
     _ -> error' $ "unexpected df header columns: " ++ show l
 
 -- 500GB:
